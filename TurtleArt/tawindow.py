@@ -80,7 +80,7 @@ from tautils import (magnitude, get_load_name, get_save_name, data_from_file,
                      find_start_stack, get_hardware, debug_output,
                      error_output, find_hat, find_bot_block,
                      restore_clamp, collapse_clamp, data_from_string,
-                     increment_name, get_screen_dpi)
+                     increment_name, get_screen_dpi, is_writeable)
 from tasprite_factory import (svg_str_to_pixbuf, svg_from_file)
 from tapalette import block_primitives
 from tapaletteview import PaletteView
@@ -656,10 +656,7 @@ class TurtleArtWindow():
         ''' Check to see if project has any blocks in use '''
         return len(self.just_blocks()) == 1
 
-    def _configure_cb(self, event):
-        ''' Screen size has changed '''
-        self.width = gtk.gdk.screen_width()
-        self.height = gtk.gdk.screen_height()
+    def recalculate_constants(self):
         CONSTANTS['titlex'] = int(-(self.width * TITLEXY[0]) /
                                    (self.coord_scale * 2))
         CONSTANTS['leftx'] = int(-(self.width * TITLEXY[0]) /
@@ -677,12 +674,6 @@ class TurtleArtWindow():
         CONSTANTS['width'] = int(self.width / self.coord_scale)
         CONSTANTS['height'] = int(self.height / self.coord_scale)
 
-        if event is None:
-            return
-
-        if self.running_sugar:
-            self.activity.check_buttons_for_fit()
-
         # If there are any constant blocks on the canvas, relabel them
         for blk in self.just_blocks():
             if blk.name in ['leftpos', 'toppos', 'rightpos', 'bottompos',
@@ -690,6 +681,19 @@ class TurtleArtWindow():
                 blk.spr.set_label('%s = %d' % (block_names[blk.name][0],
                                                CONSTANTS[blk.name]))
                 blk.resize()
+
+
+    def _configure_cb(self, event):
+        ''' Screen size has changed '''
+        self.width = gtk.gdk.screen_width()
+        self.height = gtk.gdk.screen_height()
+        self.recalculate_constants()
+
+        if event is None:
+            return
+
+        if self.running_sugar:
+            self.activity.check_buttons_for_fit()
 
     def _expose_cb(self, win=None, event=None):
         ''' Repaint '''
@@ -736,8 +740,10 @@ class TurtleArtWindow():
         ''' Run turtle! '''
         if self.running_sugar:
             self.activity.recenter()
+        elif self.interactive_mode:  # autosave in GNOME
+            self.activity.autosave()
 
-        # Look for a 'start2' block
+        # Look for a 'start' block
         for blk in self.just_blocks():
             if find_start_stack(blk):
                 self.step_time = time
@@ -759,7 +765,7 @@ class TurtleArtWindow():
                     self._run_stack(blk)
                 return
 
-        # If there is no 'start2' block, run stacks that aren't 'def action'
+        # If there is no 'start' block, run stacks that aren't 'def action'
         for blk in self.just_blocks():
             if find_block_to_run(blk):
                 self.step_time = time
@@ -1184,10 +1190,10 @@ class TurtleArtWindow():
         return self.mouse_flag == 1
 
     def get_mouse_x(self):
-        return int(self.mouse_x - (self.canvas.width / 2))
+        return int((self.mouse_x - (self.canvas.width / 2)) / self.coord_scale)
 
     def get_mouse_y(self):
-        return int((self.canvas.height / 2) - self.mouse_y)
+        return int(((self.canvas.height / 2) - self.mouse_y) / self.coord_scale)
 
     def button_press(self, mask, x, y):
         if self.running_turtleart:
@@ -1328,7 +1334,7 @@ class TurtleArtWindow():
                 elif blk.name == 'trashall':
                     for b in self.just_blocks():
                         if b.type != 'trash':
-                            if b.name == 'start2':  # Don't trash start block
+                            if b.name == 'start':  # Don't trash start block
                                 b1 = b.connections[-1]
                                 if b1 is not None:
                                     b.connections[-1] = None
@@ -1345,12 +1351,12 @@ class TurtleArtWindow():
                     defaults = None
                     name = blk.name
                     # You can only have one instance of some blocks
-                    if blk.name in ['start2', 'hat1', 'hat2']:
+                    if blk.name in ['start', 'hat1', 'hat2']:
                         blk_list = self.block_list.get_similar_blocks(
                             'block', blk.name)
                         if len(blk_list) > 0:
                             self.showlabel('dupstack')
-                            if blk.name == 'start2':
+                            if blk.name == 'start':
                                 # Recenter the screen and move the start
                                 # stack to the center of the screen
                                 if self.running_sugar:
@@ -2150,6 +2156,8 @@ class TurtleArtWindow():
 
     def process_data(self, block_data, offset=0):
         ''' Process block_data (from a macro, a file, or the clipboard). '''
+        if self.interactive_mode:
+            self.sprite_list.set_defer_draw(True)
         self._process_block_data = []
         for blk in block_data:
             if not (self._found_a_turtle(blk) or self._found_font_scale(blk)):
@@ -2219,9 +2227,6 @@ class TurtleArtWindow():
                             # Connection was to a block we haven't seen yet.
                             debug_output('Warning: dock to the future',
                                          self.running_sugar)
-                elif blk.name == 'start2':
-                    cons[1] = cons[2]
-                    cons[2] = None
                 else:
                     if self._process_block_data[i][4][0] is not None:
                         c = self._process_block_data[i][4][0]
@@ -2290,9 +2295,12 @@ class TurtleArtWindow():
                 blocks_copy.append(blk)
         blocks = blocks_copy[:]
 
-        # Resize blocks to current scale
+        # Resize blocks to current scale and draw
         if self.interactive_mode:
             self.resize_blocks(blocks)
+
+        if self.interactive_mode:
+            self.sprite_list.set_defer_draw(False)
 
         if len(blocks) > 0:
             return blocks[0]
@@ -3316,7 +3324,7 @@ class TurtleArtWindow():
                 elif blk.connections[0].name == 'hat':
                     if blk.connections[0].connections[2] == blk:
                         return blk.connections[0], 2
-                elif blk.connections[0].name == 'start2':
+                elif blk.connections[0].name == 'start':
                     if blk.connections[0].connections[1] == blk:
                         return blk.connections[0], 1
                 else:
@@ -3435,6 +3443,9 @@ class TurtleArtWindow():
                 exit()
             elif keyname == 'g':
                 self._align_to_grid()
+            elif keyname == 's':
+                self.stop_button()
+                self.toolbar_shapes['stopiton'].hide()
 
         elif keyname == 'Tab':
             # For the first pass, just tab through palettes
@@ -3904,7 +3915,7 @@ class TurtleArtWindow():
             btype = 'comment'
 
         # Some blocks can only appear once...
-        if btype in ['start2', 'hat1', 'hat2']:
+        if btype in ['start', 'hat1', 'hat2']:
             if self._check_for_duplicate(btype):
                 name = block_names[btype][0]
                 while self._find_proto_name('stack_%s' % (name), name):
@@ -4134,12 +4145,12 @@ class TurtleArtWindow():
         return False
 
     def load_start(self, ta_file=None):
-        ''' Start a new project with a 'start2' brick '''
+        ''' Start a new project with a 'start' brick '''
         if ta_file is None:
             self.process_data(
-                [[0, 'start2', PALETTE_WIDTH + 20,
+                [[0, 'start', PALETTE_WIDTH + 20,
                   self.toolbar_offset + PALETTE_HEIGHT + 20 + ICON_SIZE,
-                  [None, None, None]]])
+                  [None, None]]])
         else:
             self.process_data(data_from_file(ta_file))
             self._loaded_project = ta_file
@@ -4151,10 +4162,44 @@ class TurtleArtWindow():
         if file_name is None:
             file_name, self.load_save_folder = get_save_name(
                 '.t[a-b]', self.load_save_folder, self.save_file_name)
+        if not is_writeable(self.load_save_folder):
+            if self.running_sugar:  # Shouldn't occur in Sugar
+                debug_output('Cannot write data to %s.' %
+                             self.load_save_folder, self.running_sugar)
+            else:
+                title = _('Cannot write data to %s.') % self.load_save_folder
+                msg = _('Please choose a different save directory.')
+                dlg = gtk.MessageDialog(parent=None, type=gtk.MESSAGE_INFO,
+                                        buttons=gtk.BUTTONS_CANCEL,
+                                        message_format=title)
+                dlg.format_secondary_text(msg)
+                dlg.set_title(title)
+                dlg.set_property('skip-taskbar-hint', False)
+
+                resp = dlg.run()
+                dlg.destroy()
+            return
         if file_name is None:
             return
         if not file_name.endswith(SUFFIX):
             file_name = file_name + SUFFIX[1]
+        if os.path.exists(file_name) and not is_writeable(file_name):
+            if self.running_sugar:  # Shouldn't occur in Sugar
+                debug_output('Cannot write data to %s.' % file_name,
+                             self.running_sugar)
+            else:
+                title = _('Cannot write data to %s.') % file_name
+                msg = _('Please choose a different file name.')
+                dlg = gtk.MessageDialog(parent=None, type=gtk.MESSAGE_INFO,
+                                        buttons=gtk.BUTTONS_CANCEL,
+                                        message_format=title)
+                dlg.format_secondary_text(msg)
+                dlg.set_title(title)
+                dlg.set_property('skip-taskbar-hint', False)
+
+                resp = dlg.run()
+                dlg.destroy()
+            return
         data_to_file(self.assemble_data_to_save(), file_name)
         self.save_file_name = os.path.basename(file_name)
         if not self.running_sugar:
@@ -4516,7 +4561,8 @@ class TurtleArtWindow():
         self.status_spr.set_shape(self.status_shapes[shp])
         self.status_spr.set_label_attributes(12.0, rescale=False)
         if shp == 'status':
-            if label in ['True', 'False']:
+            # Make sure True and False get added to the POT file
+            if label in ['True', 'False', _('True'), _('False')]:
                 label = _(label)
             self.status_spr.set_label('"%s"' % (str(label)))
         else:

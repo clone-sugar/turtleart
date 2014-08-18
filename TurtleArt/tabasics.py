@@ -1109,7 +1109,7 @@ boolean operators from Numbers palette'))
                                help_string=_('Palette of variable blocks'),
                                translation=_('blocks'))
 
-        palette.add_block('start2',
+        palette.add_block('start',
                           style='clamp-style-hat',
                           label='\n' + _('start'),
                           prim_name='start',

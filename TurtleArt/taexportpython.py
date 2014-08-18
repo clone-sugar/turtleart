@@ -129,7 +129,7 @@ def save_python(tw):
     return "".join(snippets)
 
 
-def _action_stack_to_python(block, tw, name="start"):
+def _action_stack_to_python(block, tw, name='start'):
     """ Turn a stack of blocks into Python code
     name -- the name of the action stack (defaults to "start") """
 

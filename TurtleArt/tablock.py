@@ -210,6 +210,11 @@ class Block:
         self._image = None
         self._visible = True
         self.unknown = False  # Block is of unknown style
+        # Private method called before a block instance is run
+        self.before = None
+        # Private method called after a block instance is run
+        self.after = None
+        self.private = None  # Private data for block primitive
 
         self._block_methods = {
             'basic-style': self._make_basic_style,
@@ -1117,9 +1122,7 @@ class Block:
         self._make_block_graphics(svg, self.svg.clamp)
         self.docks = [['unavailable', False, 0, 0],
                       ['flow', False, self.svg.docks[0][0],
-                                      self.svg.docks[0][1]],
-                      # Skip bottom of clamp
-                      ['unavailable', False, 0, 0]]
+                                      self.svg.docks[0][1]]]
 
     def _make_clamp_style_hat_1arg(self, svg, extend_x=0, extend_y=4):
         self.svg.expand(self.dx + self.ex + extend_x, self.ey + extend_y)
@@ -1134,9 +1137,7 @@ class Block:
                       ['number', False, self.svg.docks[0][0],
                                         self.svg.docks[0][1]],
                       ['flow', False, self.svg.docks[1][0],
-                                      self.svg.docks[1][1]],
-                      # Skip bottom of clamp
-                      ['unavailable', False, 0, 0]]
+                                      self.svg.docks[1][1]]]
 
     def _make_clamp_style_boolean(self, svg, extend_x=0, extend_y=4):
         self.svg.expand(self.dx + self.ex + extend_x, self.ey + extend_y)

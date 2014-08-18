@@ -32,6 +32,7 @@ import cairo
 import pickle
 import subprocess
 import os
+import stat
 import string
 import mimetypes
 from gettext import gettext as _
@@ -177,7 +178,7 @@ def json_load(text):
 def find_hat(data):
     ''' Find a hat in a stack '''
     for i, blk in enumerate(data):
-        if _to_str(blk[1]) == 'hat':
+        if isinstance(blk[1], (tuple, list)) and _to_str(blk[1][0]) == 'hat':
             return i
     return None
 
@@ -379,7 +380,24 @@ def data_from_string(text):
 
 def data_to_file(data, ta_file):
     ''' Write data to a file. '''
-    file_handle = file(ta_file, 'w')
+    try:
+        file_handle = file(ta_file, 'w')
+    except IOError, e:
+        error_output('Could not write to %s: %s.' % (ta_file, e))
+        tmp_file = os.path.join(os.path.expanduser('~'),
+                                os.path.basename(ta_file))
+        try:
+            debug_outpur('Trying to write to %s' % (tmp_file))
+            file_handle = file(tmp_file, 'w')
+        except IOError, e:
+            error_output('Could not write to %s: %s.' % (tmp_file, e))
+            tmp_file = os.path.join('/tmp', os.path.basename(ta_file))
+            try:
+                debug_outpur('Trying to write to %s' % (tmp_file))
+                file_handle = file(tmp_file, 'w')
+            except IOError, e:
+                error_output('Could not write to %s: %s.' % (tmp_file, e))
+                return
     file_handle.write(data_to_string(data))
     file_handle.close()
 
@@ -781,10 +799,10 @@ def find_bot_block(blk):
 
 
 def find_start_stack(blk):
-    ''' Find a stack with a 'start2' block on top. '''
+    ''' Find a stack with a 'start' block on top. '''
     if blk is None:
         return False
-    if find_top_block(blk).name == 'start2':
+    if find_top_block(blk).name == 'start':
         return True
     else:
         return False
@@ -840,8 +858,8 @@ def get_stack_name(blk):
     If the top block of this stack is not a stack-defining block, return
     None. '''
     top_block = find_top_block(blk)
-    if top_block.name == 'start2':
-        return 'start2'
+    if top_block.name == 'start':
+        return 'start'
     elif top_block.name == 'hat1':
         return 'stack1'
     elif top_block.name == 'hat2':
@@ -977,3 +995,15 @@ def power_manager_off(status):
                 os.remove(PATH)
             except OSError:
                 pass
+
+
+def is_writeable(path):
+    ''' Make sure we can write to the directory or file '''
+    if not os.path.exists(path):
+        return False
+    stats = os.stat(path)
+    if (stats.st_uid == os.geteuid() and stats.st_mode & stat.S_IWUSR) or \
+       (stats.st_gid == os.getegid() and stats.st_mode & stat.S_IWGRP) or \
+       (stats.st_mode & stat.S_IWOTH):
+        return True
+    return False
