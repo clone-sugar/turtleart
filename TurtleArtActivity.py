@@ -404,6 +404,29 @@ class TurtleArtActivity(activity.Activity):
         if hasattr(self, 'get_window'):
             self.get_window().set_cursor(self._old_cursor)
 
+    def do_save_as_wavefront_cb(self, button):
+        self.save_as_wavefront.set_icon('logo-saveon')
+        def internal_cb():
+            if hasattr(self, 'get_window'):
+                if hasattr(self.get_window(), 'get_cursor'):
+                    self._old_cursor = self.get_window().get_cursor()
+                    self.get_window().set_cursor(gtk.gdk.Cursor(gtk.gdk.WATCH))
+            self.tw.save_as_obj()
+            self.save_as_wavefront.set_icon('logo-saveoff')
+
+        gobject.timeout_add(250, internal_cb)
+
+    def do_load_wavefront_cb(self, button):
+        ''' Import an existing .obj file into TA'''
+        def internal_cb():
+            if hasattr(self, 'get_window'):
+                if hasattr(self.get_window(), 'get_cursor'):
+                    self._old_cursor = self.get_window().get_cursor()
+                    self.get_window().set_cursor(gtk.gdk.Cursor(gtk.gdk.WATCH))
+            self.tw.sugar_import_as_obj()
+
+        gobject.timeout_add(250, internal_cb)
+
     # Main/palette toolbar button callbacks
 
     def do_palette_cb(self, button):
@@ -1152,6 +1175,10 @@ class TurtleArtActivity(activity.Activity):
                 'filesaveoff', _('Save snapshot'), self.do_keep_cb,
                 None, button_box)
 
+            self.save_as_wavefront, label = self._add_button_and_label(
+                'logo-saveoff', _('Save as wavefront .obj'),
+                self.do_save_as_wavefront_cb, None, button_box)
+
             load_button = self._add_button(
                 'load', _('Load'), self._save_load_palette_cb,
                 toolbar)
@@ -1183,6 +1210,11 @@ class TurtleArtActivity(activity.Activity):
             self.load_python, label = self._add_button_and_label(
                 'pippy-openoff', _('Load Python block'),
                 self.do_load_python_cb, None, button_box)
+
+            self.load_wavefront, label = self._add_button_and_label(
+            'load-from-journal', _('Load wavefront .obj'),
+            self.do_load_wavefront_cb, None, button_box)
+
             button_box.show_all()
             self._load_palette.set_content(button_box)
         else:
@@ -1211,6 +1243,9 @@ class TurtleArtActivity(activity.Activity):
                 toolbar)
             self.keep_button = self._add_button(
                 'filesaveoff', _('Save snapshot'), self.do_keep_cb, toolbar)
+            self.save_as_wavefront = self._add_button(
+                'logo-saveoff', _('Save as wavefront .obj'),
+                self.do_save_as_wavefront_cb, toolbar)
             self.load_ta_project = self._add_button(
                 'load-from-journal', _('Add project'),
                 self.do_load_ta_project_cb, toolbar)

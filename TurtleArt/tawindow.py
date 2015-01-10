@@ -4206,16 +4206,19 @@ class TurtleArtWindow():
             self.save_folder = self.load_save_folder
 
     def save_as_obj(self):
-
         if self.save_folder is not None:
             self.load_save_folder = self.save_folder
-        file_name, self.load_save_folder = get_save_name(
-            '.obj', self.load_save_folder, self.save_file_name)
-        if file_name is None:
-            return
-        if not file_name.endswith('.obj'):
-            file_name = file_name + '.obj'
-        
+
+        if self.running_sugar:
+            file_name = os.path.join(get_path(self.activity, 'instance'), 'tmp.obj')
+        else:
+            file_name, self.load_save_folder = get_save_name(
+                '.obj', self.load_save_folder, self.save_file_name)
+            if file_name is None:
+                return
+            if not file_name.endswith('.obj'):
+                file_name = file_name + '.obj'
+
         #dump to separate function
 
         #file_name = file_name + '.obj'
@@ -4225,14 +4228,14 @@ class TurtleArtWindow():
         for vertex in vertices:
             if vertex not in data:
                 data.append([vertex[0], vertex[1], vertex[2]])
-        
+
         file_handle = file(file_name, 'w')
         for line in data:
             string = 'v' + '\t' + str(line[0]) + '\t' + str(line[1]) + '\t' + str(line[2])  + '\n'
             file_handle.write(string)
 
         line_data = [] #To remove duplication of lines
-        
+
         for i,val in enumerate(lines):
             if(i==(len(lines)-1)):
                 break
@@ -4251,22 +4254,37 @@ class TurtleArtWindow():
 
         file_handle.close()
 
-    def import_as_obj(self):
-        #pass
-        ''' Import an obj file'''
-        file_name, self.load_save_folder = get_load_name(
-            '.obj',
-            self.load_save_folder)
-        if file_name is None:
-            return
-        if not file_name.endswith('.obj'):
-            file_name = file_name + '.obj'
+        if self.running_sugar:
+            from sugar.datastore import datastore
+            from sugar import profile
 
-        #self.load_files(file_name, create_new_project)
-        #if create_new_project:
-        #    self.save_file_name = os.path.basename(file_name)
-        #if self.running_sugar:
-        #    self.activity.metadata['title'] = os.path.split(file_name)[1]
+            dsobject = datastore.create()
+            dsobject.metadata['title'] = _('TurtleBlocks wavefront .obj')
+            dsobject.metadata['icon-color'] = profile.get_color().to_string()
+            dsobject.metadata['mime_type'] = 'text/plain'
+            dsobject.set_file_path(file_name)
+            datastore.write(dsobject)
+            dsobject.destroy()
+            os.remove(file_name)
+
+    def sugar_import_as_obj(self):
+        chooser_dialog(self.parent, None, self.import_as_obj)
+
+    def import_as_obj(self, file_name=None):
+        ''' Import an obj file'''
+        if not self.running_sugar and file_name is None:
+            file_name, self.load_save_folder = get_load_name(
+                '.obj',
+                self.load_save_folder)
+            if file_name is None:
+                return
+            if not file_name.endswith('.obj'):
+                file_name = file_name + '.obj'
+
+        if self.running_sugar:
+            if file_name is None:
+                return
+            file_name = file_name.file_path
 
         self.new_project()
         v, l = self.turtles.get_active_turtle().draw_obj(file_name)
@@ -4328,7 +4346,7 @@ class TurtleArtWindow():
         blocks.append([serial, ["number", dest[2]], sx+66, sy+(42*2), [last_index, 'null']])
         serial += 1
         sy += 42*3
-        
+
         for i,line in enumerate(lines[1:]):
             point = line[0]
             if not point == lines[i][1]:
@@ -4365,7 +4383,7 @@ class TurtleArtWindow():
             blocks.append([serial, ["number", dest[2]], sx+66, sy+(42*2), [last_index, 'null']])
             serial += 1
             sy += 42*3
-        
+
         blocks.append([-1, ["turtle", "Yertle"], 0.0, 0.0, 0.0, 0, 50, 5])
         blocks.append([-1, "_saved_font_scale", 0, 0, 2.0])
         str1 = data_to_string(blocks)
@@ -4662,7 +4680,7 @@ class TurtleArtWindow():
                 subprocess.check_output(
                     ['cp', TMP_ODP_PATH, os.path.join(datapath, name)])
 
-          
+
 
     def save_as_icon(self, name=''):
         from util.sugariconify import SugarIconify
